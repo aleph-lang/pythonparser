@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 aleph-syntax-tree = { git = "ssh://git@github.com/aleph-lang/aleph-syntax-tree.git" }
-rustpython-parser = "0.2.0"
+rustpython-parser = { git = "https://github.com/RustPython/RustPython.git", rev="c7faae9b22ce31a3ba1f2cc1cd3ad759b54ce100" }
 
