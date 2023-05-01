@@ -141,14 +141,10 @@ fn translate_expr_kind(ek: ExprKind) -> at {
                     Cmpop::LtE => at::LE{expr1: Box::new(res), expr2: Box::new(right_expr)},
                     Cmpop::Gt => at::Not{bool_expr: Box::new(at::LE{expr1: Box::new(res), expr2: Box::new(right_expr.clone())})},
                     Cmpop::GtE => at::Or{bool_expr1: Box::new(at::LE{expr1: Box::new(res.clone()), expr2: Box::new(right_expr.clone())}), bool_expr2: Box::new(at::Eq{expr1: Box::new(res.clone()), expr2: Box::new(right_expr.clone())})},
-                    /*Is,
-                    IsNot,
-                    In,
-                    NotIn,*/
-                    _ => {
-                        println!("Compare not impl {:?}", op);
-                        res
-                    }
+                    Cmpop::Is => at::Eq{expr1: Box::new(res), expr2: Box::new(right_expr)},
+                    Cmpop::IsNot => at::Not{bool_expr: Box::new(at::Eq{expr1: Box::new(res), expr2: Box::new(right_expr)})},
+                    Cmpop::In => at::In{expr1: Box::new(res), expr2: Box::new(right_expr)},
+                    Cmpop::NotIn => at::Not{bool_expr: Box::new(at::In{expr1: Box::new(res), expr2: Box::new(right_expr)})},
                 }
             }
             res
@@ -225,18 +221,9 @@ fn translate_stmt_kind(sk : StmtKind) -> at {
             println!("Not impl AnnAssign {:?} {:?} {:?} {:?}", target, annotation, value, simple);
             at::Unit 
         },
-        StmtKind::For{target, iter, body, orelse, type_comment} => {
-            println!("Not impl For {:?} {:?} {:?} {:?} {:?}", target, iter, body, orelse, type_comment);
-            at::Unit 
-        },
-        StmtKind::AsyncFor{target, iter, body, orelse, type_comment} => {
-            println!("Not impl AsyncFor {:?} {:?} {:?} {:?} {:?}", target, iter, body, orelse, type_comment);
-            at::Unit 
-        },
-        StmtKind::While{test, body, orelse} => {
-            println!("Not impl While {:?} {:?} {:?}", test, body, orelse);
-            at::Unit 
-        },
+        StmtKind::For{target, iter, body, orelse, type_comment: _} => at::While{init_expr: Box::new(translate_expr_kind(target.node)), condition: Box::new(translate_expr_kind(iter.node)), loop_expr: Box::new(translate_stmt_kind_list(body)), post_expr: Box::new(translate_stmt_kind_list(orelse))},
+        StmtKind::AsyncFor{target, iter, body, orelse, type_comment: _} => at::While{init_expr: Box::new(translate_expr_kind(target.node)), condition: Box::new(translate_expr_kind(iter.node)), loop_expr: Box::new(translate_stmt_kind_list(body)), post_expr: Box::new(translate_stmt_kind_list(orelse))},
+        StmtKind::While{test, body, orelse} => at::While{init_expr: Box::new(at::Unit), condition: Box::new(translate_expr_kind(test.node)), loop_expr: Box::new(translate_stmt_kind_list(body)), post_expr: Box::new(translate_stmt_kind_list(orelse))},
         StmtKind::If{test, body, orelse} => at::If{condition: Box::new(translate_expr_kind(test.node)), then: Box::new(translate_stmt_kind_list(body)), els: Box::new(translate_stmt_kind_list(orelse))},
         StmtKind::With{items, body, type_comment} => {
             println!("Not impl With {:?} {:?} {:?}", items, body, type_comment);
