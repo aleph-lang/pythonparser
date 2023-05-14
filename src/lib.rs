@@ -245,10 +245,7 @@ fn translate_stmt_kind(sk : StmtKind) -> at {
             println!("Not impl Try {:?} {:?} {:?} {:?}", body, handlers, orelse, finalbody);
             at::Unit 
         },
-        StmtKind::Assert{test, msg} => {
-            println!("Not impl Assert {:?} {:?}", test, msg);
-            at::Unit 
-        },
+        StmtKind::Assert{test, msg} => at::Assert{condition: Box::new(translate_expr_kind(test.node)), message: Box::new(translate_expr_kind(ExprKind::Yield { value: msg}))},
         StmtKind::Import{names} => {
             println!("Not impl Import {:?}", names);
             at::Unit 
@@ -267,16 +264,13 @@ fn translate_stmt_kind(sk : StmtKind) -> at {
         },
         StmtKind::Expr{value} => translate_expr_kind(value.node),
         StmtKind::Pass => {
-            println!("Not impl Pass");
             at::Unit 
         },
         StmtKind::Break => {
-            println!("Not impl Break");
-            at::Unit 
+            at::Break 
         },
         StmtKind::Continue => {
-            println!("Not impl Continue");
-            at::Unit 
+            at::Continue 
         }
     }
 }
