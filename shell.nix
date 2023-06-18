@@ -11,7 +11,7 @@ in
     # dependencies
     buildInputs = with nixpkgs; [ 
         #nixpkgs.latest.rustChannels.nightly.rust
-	(nixpkgs.rustChannelOf { date = "2023-04-26"; channel = "nightly"; }).rust
+	(nixpkgs.rustChannelOf { date = "2023-06-18"; channel = "nightly"; }).rust
         cargo
         rustc
         python-with-packages

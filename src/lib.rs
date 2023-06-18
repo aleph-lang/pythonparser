@@ -179,7 +179,7 @@ fn translate_expr_kind(ek: ExprKind) -> at {
             at::Unit
         },
         ExprKind::Name{id, ctx: _} => {
-            at::String{value: id}
+            at::Ident{value: id}
         },
         ExprKind::List{elts, ctx} => {
             println!("Not impl List {:?} {:?}", elts, ctx);
