@@ -2,8 +2,11 @@
 name = "python_parser"
 version = "0.1.0"
 edition = "2021"
+license-file="LICENSE"
+repository="https://github.com/aleph-lang/pythonparser"
+description="Python Parser : generate Aleph Syntax Tree."
 
 [dependencies]
-aleph-syntax-tree = { git = "ssh://git@github.com/aleph-lang/aleph-syntax-tree.git" }
+aleph-syntax-tree = "0.1.0"
 rustpython-parser = { git = "https://github.com/RustPython/RustPython.git", rev="c7faae9b22ce31a3ba1f2cc1cd3ad759b54ce100" }
 
