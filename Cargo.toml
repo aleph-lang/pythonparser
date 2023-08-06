@@ -8,5 +8,5 @@ description="Python Parser : generate Aleph Syntax Tree."
 
 [dependencies]
 aleph-syntax-tree = "0.1.0"
-rustpython-parser = { git = "https://github.com/RustPython/RustPython.git", rev="c7faae9b22ce31a3ba1f2cc1cd3ad759b54ce100" }
+rustpython-parser = "0.2.0"
 
