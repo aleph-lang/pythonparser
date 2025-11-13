@@ -1,12 +1,12 @@
 [package]
 name = "ale_python_parser"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license-file="LICENSE"
 repository="https://github.com/aleph-lang/pythonparser"
 description="Python Parser : generate Aleph Syntax Tree."
 
 [dependencies]
-aleph-syntax-tree = "0.1.0"
-rustpython-parser = "0.2.0"
+aleph-syntax-tree = "0.1.4"
+rustpython-parser = "0.4.0"
 

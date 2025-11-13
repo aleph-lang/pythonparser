@@ -1,301 +1,291 @@
 use aleph_syntax_tree::syntax::AlephTree as at;
+use rustpython_parser::ast::{
+    Expr, Stmt, BoolOp, CmpOp, Operator, UnaryOp, Arguments, ExprName, StmtReturn,
+    ExprBoolOp, ExprBinOp, ExprUnaryOp, ExprLambda, ExprIfExp, ExprCompare, ExprCall,
+    StmtFunctionDef, StmtAsyncFunctionDef, StmtClassDef, StmtFor, StmtAsyncFor, StmtWhile,
+    StmtIf, StmtAssert, StmtImport, StmtExpr
+};
+use rustpython_parser::Parse;
 
-use rustpython_parser::{ast, parser};
-use rustpython_parser::ast::{ExprKind, StmtKind};
-use crate::ast::{Arguments, Boolop, Cmpop, Constant, Located, Operator, Unaryop};
-
-fn extract_constant(value : Constant) -> at {
+/// Extracts a constant value from a Python `Constant` into an `AlephTree` node.
+fn extract_constant(value: rustpython_parser::ast::Constant) -> at {
     match value {
-        Constant::None => at::Unit,
-        Constant::Bool(b) => at::Bool{value: b.to_string()},
-        Constant::Str(s) => at::String{value: format!("\"{}\"", s)},
-        Constant::Bytes(b) => at::Bytes{elems: b},
-        Constant::Int(i) => at::Int{value: i.to_string()},
-        Constant::Tuple(v) => {
-            let mut res = Vec::new();
-            for c in v {
-                res.push(Box::new(extract_constant(c)));
-            }
-            at::Tuple{elems : res}
+        rustpython_parser::ast::Constant::None => at::Unit,
+        rustpython_parser::ast::Constant::Bool(b) => at::Bool { value: b.to_string() },
+        rustpython_parser::ast::Constant::Str(s) => at::String { value: format!("\"{}\"", s) },
+        rustpython_parser::ast::Constant::Bytes(b) => at::Bytes { elems: b },
+        rustpython_parser::ast::Constant::Int(i) => at::Int { value: i.to_string() },
+        rustpython_parser::ast::Constant::Tuple(v) => at::Tuple {
+            elems: v.into_iter().map(|c| Box::new(extract_constant(c))).collect(),
         },
-        Constant::Float(f) => at::Float{value: f.to_string()},
-        Constant::Complex{real, imag} => at::Complex{real: real.to_string(), imag: imag.to_string()},
-        Constant::Ellipsis => at::Ellipsis
+        rustpython_parser::ast::Constant::Float(f) => at::Float { value: f.to_string() },
+        rustpython_parser::ast::Constant::Complex { real, imag } => at::Complex {
+            real: real.to_string(),
+            imag: imag.to_string(),
+        },
+        rustpython_parser::ast::Constant::Ellipsis => at::Ellipsis,
     }
 }
 
-fn extract_name(ek: ExprKind) -> String {
-    match ek {
-        ExprKind::Name{id, ctx: _} => id,
+/// Extracts the identifier string from a Python `Expr::Name` node.
+fn extract_name(expr: &Expr) -> String {
+    match expr {
+        Expr::Name(ExprName { id, .. }) => id.to_string(),
         _ => {
-            println!("Not Impl extract_name {:?}", ek);
-            "".to_string()
+            println!("Not implemented: extract_name for {:?}", expr);
+            String::new()
         }
     }
 }
 
-// TODO translate Arguments to Vec<Box<at>>
-// pub struct Arguments<U = ()> {
-//    pub posonlyargs: Vec<Arg<U>>,
-//    pub args: Vec<Arg<U>>,
-//    pub vararg: Option<Box<Arg<U>>>,
-//    pub kwonlyargs: Vec<Arg<U>>,
-//    pub kw_defaults: Vec<Expr<U>>,
-//    pub kwarg: Option<Box<Arg<U>>>,
-//    pub defaults: Vec<Expr<U>>,
-//}
-fn translate_arguments_vec(_args : Arguments) -> Vec<Box<at>> {
+/// Translates Python function arguments into a vector of `AlephTree` nodes.
+/// Currently a stub, returns an empty vector.
+fn translate_arguments_vec(_args: &Arguments) -> Vec<Box<at>> {
     Vec::new()
 }
 
-fn translate_expr_kind(ek: ExprKind) -> at {
-    match ek {
-        ExprKind::BoolOp{op, values} => {
+/// Translates a Python expression AST node into an `AlephTree`.
+fn translate_expr(expr: &Expr) -> at {
+    match expr {
+        Expr::BoolOp(ExprBoolOp { op, values, .. }) => {
             let mut res = at::Unit;
             for value in values {
                 res = match op {
-                    Boolop::And => match res {
-                        at::Unit => translate_expr_kind(value.node),
-                        _ => at::And{bool_expr1: Box::new(res), bool_expr2: Box::new(translate_expr_kind(value.node))},
+                    BoolOp::And => match res {
+                        at::Unit => translate_expr(value),
+                        _ => at::And {
+                            bool_expr1: Box::new(res),
+                            bool_expr2: Box::new(translate_expr(value)),
+                        },
                     },
-                    Boolop::Or => match res {
-                        at::Unit => translate_expr_kind(value.node),
-                        _ => at::Or{bool_expr1: Box::new(res), bool_expr2: Box::new(translate_expr_kind(value.node))}
-                    }
+                    BoolOp::Or => match res {
+                        at::Unit => translate_expr(value),
+                        _ => at::Or {
+                            bool_expr1: Box::new(res),
+                            bool_expr2: Box::new(translate_expr(value)),
+                        },
+                    },
                 }
             }
             res
-        },
-        ExprKind::NamedExpr{target, value} => {
-            println!("Not impl NamedExpr {:?} {:?}", target, value);
-            at::Unit
-        },
-        ExprKind::BinOp{left, op, right} => {
-            match op {
-                Operator::Add => at::Add{number_expr1: Box::new(translate_expr_kind(left.node)), number_expr2: Box::new(translate_expr_kind(right.node))},
-                Operator::Sub => at::Sub{number_expr1: Box::new(translate_expr_kind(left.node)), number_expr2: Box::new(translate_expr_kind(right.node))},
-                Operator::Mult => at::Mul{number_expr1: Box::new(translate_expr_kind(left.node)), number_expr2: Box::new(translate_expr_kind(right.node))},
-                Operator::Div => at::Div{number_expr1: Box::new(translate_expr_kind(left.node)), number_expr2: Box::new(translate_expr_kind(right.node))},
-                _ => {
-                    println!("Not impl BinOp {:?} {:?} {:?}", left, op, right);
-                    at::Unit
-                }
+        }
+        Expr::BinOp(ExprBinOp { left, op, right, .. }) => match op {
+            Operator::Add => at::Add {
+                number_expr1: Box::new(translate_expr(left)),
+                number_expr2: Box::new(translate_expr(right)),
+            },
+            Operator::Sub => at::Sub {
+                number_expr1: Box::new(translate_expr(left)),
+                number_expr2: Box::new(translate_expr(right)),
+            },
+            Operator::Mult => at::Mul {
+                number_expr1: Box::new(translate_expr(left)),
+                number_expr2: Box::new(translate_expr(right)),
+            },
+            Operator::Div => at::Div {
+                number_expr1: Box::new(translate_expr(left)),
+                number_expr2: Box::new(translate_expr(right)),
+            },
+            _ => {
+                println!("Not implemented: BinOp {:?} {:?} {:?}", left, op, right);
+                at::Unit
             }
         },
-        ExprKind::UnaryOp{op, operand} => {
-            match op {
-                Unaryop::Not => at::Not{bool_expr: Box::new(translate_expr_kind(operand.node))},
-                Unaryop::USub => at::Neg{expr: Box::new(translate_expr_kind(operand.node))},
-                _ => {
-                    println!("Not impl UnaryOp {:?} {:?}", op, operand);
-                    at::Unit
-                }
+        Expr::UnaryOp(ExprUnaryOp { op, operand, .. }) => match op {
+            UnaryOp::Not => at::Not {
+                bool_expr: Box::new(translate_expr(operand)),
+            },
+            UnaryOp::USub => at::Neg {
+                expr: Box::new(translate_expr(operand)),
+            },
+            _ => {
+                println!("Not implemented: UnaryOp {:?} {:?}", op, operand);
+                at::Unit
             }
         },
-        ExprKind::Lambda{args, body} => at::LetRec{name: "lambda".to_string(), args: translate_arguments_vec(*args), body: Box::new(translate_expr_kind(body.node))},
-        ExprKind::IfExp{test, body, orelse} => at::If{condition: Box::new(translate_expr_kind(test.node)), then: Box::new(translate_expr_kind(body.node)), els: Box::new(translate_expr_kind(orelse.node))},
-        ExprKind::Dict{keys, values} => {
-            println!("Not impl Dict {:?} {:?}", keys, values);
-            at::Unit
+        Expr::Lambda(ExprLambda { args, body, .. }) => at::LetRec {
+            name: "lambda".to_string(),
+            args: translate_arguments_vec(args),
+            body: Box::new(translate_expr(body)),
         },
-        ExprKind::Set{elts} => {
-            println!("Not impl Set {:?}", elts);
-            at::Unit
+        Expr::IfExp(ExprIfExp { test, body, orelse, .. }) => at::If {
+            condition: Box::new(translate_expr(test)),
+            then: Box::new(translate_expr(body)),
+            els: Box::new(translate_expr(orelse)),
         },
-        ExprKind::ListComp{elt, generators} => {
-            println!("Not impl ListComp {:?} {:?}", elt, generators);
-            at::Unit
-        },
-        ExprKind::SetComp{elt, generators} => {
-            println!("Not impl Set {:?} {:?}", elt, generators);
-            at::Unit
-        },
-        ExprKind::DictComp{key, value, generators} => {
-            println!("Not impl DictComp {:?} {:?} {:?}", key, value, generators);
-            at::Unit
-        },
-        ExprKind::GeneratorExp{elt, generators} => {
-            println!("Not impl GeneratorExp {:?} {:?}", elt, generators);
-            at::Unit
-        },
-        ExprKind::Await{value} => {
-            println!("Not impl Await {:?}", value);
-            at::Unit
-        },
-        ExprKind::Yield{value} => {
-            println!("Not impl Yield {:?}", value);
-            at::Unit
-        },
-        ExprKind::YieldFrom{value} => {
-            println!("Not impl YieldFrom {:?}", value);
-            at::Unit
-        },
-        ExprKind::Compare{left, ops, comparators} => {
-            let mut res = translate_expr_kind(left.node);
+        Expr::Compare(ExprCompare { left, ops, comparators, .. }) => {
+            let mut res = translate_expr(left);
             for (op, right) in ops.iter().zip(comparators.iter()) {
-                let right_expr = translate_expr_kind(right.node.clone());
+                let right_expr = translate_expr(right);
                 res = match op {
-                    Cmpop::Eq => at::Eq{expr1: Box::new(res), expr2: Box::new(right_expr)},
-                    Cmpop::NotEq => at::Not{bool_expr: Box::new(at::Eq{expr1: Box::new(res), expr2: Box::new(right_expr)})},
-                    Cmpop::Lt => at::And{bool_expr1: Box::new(at::LE{expr1: Box::new(res.clone()), expr2: Box::new(right_expr.clone())}), bool_expr2: Box::new(at::Not{bool_expr: Box::new(at::Eq{expr1: Box::new(res.clone()), expr2: Box::new(right_expr.clone())})})},
-                    Cmpop::LtE => at::LE{expr1: Box::new(res), expr2: Box::new(right_expr)},
-                    Cmpop::Gt => at::Not{bool_expr: Box::new(at::LE{expr1: Box::new(res), expr2: Box::new(right_expr.clone())})},
-                    Cmpop::GtE => at::Or{bool_expr1: Box::new(at::LE{expr1: Box::new(res.clone()), expr2: Box::new(right_expr.clone())}), bool_expr2: Box::new(at::Eq{expr1: Box::new(res.clone()), expr2: Box::new(right_expr.clone())})},
-                    Cmpop::Is => at::Eq{expr1: Box::new(res), expr2: Box::new(right_expr)},
-                    Cmpop::IsNot => at::Not{bool_expr: Box::new(at::Eq{expr1: Box::new(res), expr2: Box::new(right_expr)})},
-                    Cmpop::In => at::In{expr1: Box::new(res), expr2: Box::new(right_expr)},
-                    Cmpop::NotIn => at::Not{bool_expr: Box::new(at::In{expr1: Box::new(res), expr2: Box::new(right_expr)})},
+                    CmpOp::Eq => at::Eq {
+                        expr1: Box::new(res),
+                        expr2: Box::new(right_expr),
+                    },
+                    CmpOp::NotEq => at::Not {
+                        bool_expr: Box::new(at::Eq {
+                            expr1: Box::new(res),
+                            expr2: Box::new(right_expr),
+                        }),
+                    },
+                    CmpOp::Lt => at::And {
+                        bool_expr1: Box::new(at::LE {
+                            expr1: Box::new(res.clone()),
+                            expr2: Box::new(right_expr.clone()),
+                        }),
+                        bool_expr2: Box::new(at::Not {
+                            bool_expr: Box::new(at::Eq {
+                                expr1: Box::new(res.clone()),
+                                expr2: Box::new(right_expr.clone()),
+                            }),
+                        }),
+                    },
+                    CmpOp::LtE => at::LE {
+                        expr1: Box::new(res),
+                        expr2: Box::new(right_expr),
+                    },
+                    CmpOp::Gt => at::Not {
+                        bool_expr: Box::new(at::LE {
+                            expr1: Box::new(res),
+                            expr2: Box::new(right_expr.clone()),
+                        }),
+                    },
+                    CmpOp::GtE => at::Or {
+                        bool_expr1: Box::new(at::LE {
+                            expr1: Box::new(res.clone()),
+                            expr2: Box::new(right_expr.clone()),
+                        }),
+                        bool_expr2: Box::new(at::Eq {
+                            expr1: Box::new(res.clone()),
+                            expr2: Box::new(right_expr.clone()),
+                        }),
+                    },
+                    CmpOp::Is => at::Eq {
+                        expr1: Box::new(res),
+                        expr2: Box::new(right_expr),
+                    },
+                    CmpOp::IsNot => at::Not {
+                        bool_expr: Box::new(at::Eq {
+                            expr1: Box::new(res),
+                            expr2: Box::new(right_expr),
+                        }),
+                    },
+                    CmpOp::In => at::In {
+                        expr1: Box::new(res),
+                        expr2: Box::new(right_expr),
+                    },
+                    CmpOp::NotIn => at::Not {
+                        bool_expr: Box::new(at::In {
+                            expr1: Box::new(res),
+                            expr2: Box::new(right_expr),
+                        }),
+                    },
                 }
             }
             res
-        },
-        ExprKind::Call{func, args, keywords: _} => {
-            let name = extract_name(func.node);
-            let mut param_list: Vec<Box<at>> = Vec::new();
-            for arg in args {
-                param_list.push(Box::new(translate_expr_kind(arg.node)));
+        }
+        Expr::Call(ExprCall { func, args, .. }) => {
+            let name = extract_name(func);
+            let param_list = args.iter().map(|arg| Box::new(translate_expr(arg))).collect();
+            at::App {
+                object_name: "".to_string(),
+                fun: Box::new(at::String { value: name }),
+                param_list,
             }
-            at::App{object_name: "".to_string(), fun: Box::new(at::String{value: name}), param_list: param_list}
-        },
-        ExprKind::FormattedValue{value, conversion, format_spec} => {
-            println!("Not impl FormattedValue {:?} {:?} {:?}", value, conversion, format_spec);
-            at::Unit
-        },
-        ExprKind::JoinedStr{values} => {
-            println!("Not impl JoinedStr {:?}", values);
-            at::Unit
-        },
-        ExprKind::Constant{value, kind: _} => extract_constant(value),
-        ExprKind::Attribute{value, attr, ctx} => {
-            println!("Not impl Attribute {:?} {:?} {:?}", value, attr, ctx);
-            at::Unit
-        },
-        ExprKind::Subscript{value, slice, ctx} => {
-            println!("Not impl Subscript {:?} {:?} {:?}", value, slice, ctx);
-            at::Unit
-        },
-        ExprKind::Starred{value, ctx} => {
-            println!("Not impl Starred {:?} {:?}", value, ctx);
-            at::Unit
-        },
-        ExprKind::Name{id, ctx: _} => {
-            at::Ident{value: id}
-        },
-        ExprKind::List{elts, ctx} => {
-            println!("Not impl List {:?} {:?}", elts, ctx);
-            at::Unit
-        },
-        ExprKind::Tuple{elts, ctx} => {
-            println!("Not impl Tuple {:?} {:?}", elts, ctx);
-            at::Unit
-        },
-        ExprKind::Slice{lower, upper, step} => {
-            println!("Not impl Slice {:?} {:?} {:?}", lower, upper, step);
+        }
+        Expr::Constant(expr_constant) => extract_constant(expr_constant.value.clone()),
+        Expr::Name(ExprName { id, .. }) => at::Ident { value: id.to_string() },
+        _ => {
+            println!("Not implemented expression {:?}", expr);
             at::Unit
         }
     }
 }
 
-fn translate_stmt_kind(sk : StmtKind) -> at {
-    match sk {
-        StmtKind::FunctionDef{name, args, body, decorator_list: _, returns: _, type_comment: _} => at::LetRec{name: name, args: translate_arguments_vec(*args), body: Box::new(translate_stmt_kind_list(body))},
-        StmtKind::AsyncFunctionDef{name, args, body, decorator_list: _, returns: _, type_comment: _} => at::LetRec{name: name, args: translate_arguments_vec(*args), body: Box::new(translate_stmt_kind_list(body))},
-        StmtKind::ClassDef{name, bases: _, keywords: _, body, decorator_list: _} => at::Clss{name: name, attribute_list: Vec::new(), body: Box::new(translate_stmt_kind_list(body))},
-        StmtKind::Return{value} => match value {
+/// Translates a Python statement AST node into an `AlephTree`.
+fn translate_stmt(stmt: &Stmt) -> at {
+    match stmt {
+        Stmt::FunctionDef(StmtFunctionDef { name, args, body, .. }) |
+        Stmt::AsyncFunctionDef(StmtAsyncFunctionDef { name, args, body, .. }) => at::LetRec {
+            name: name.to_string(),
+            args: translate_arguments_vec(args),
+            body: Box::new(translate_stmt_list(body)),
+        },
+        Stmt::ClassDef(StmtClassDef { name, body, .. }) => at::Clss {
+            name: name.to_string(),
+            attribute_list: Vec::new(),
+            extends: None,
+            implements: Vec::new(),
+            body: Box::new(translate_stmt_list(body)),
+        },
+        Stmt::Return(StmtReturn { value, .. }) => match value {
             None => at::Unit,
-            Some(r) => at::Return{value: Box::new(translate_expr_kind(r.node))},
+            Some(expr) => at::Return {
+                value: Box::new(translate_expr(expr)),
+            },
         },
-        StmtKind::Delete{targets} => {
-            println!("Not impl Delete {:?}", targets);
-            at::Unit 
+        Stmt::For(StmtFor { target, iter, body, orelse, .. }) |
+        Stmt::AsyncFor(StmtAsyncFor { target, iter, body, orelse, .. }) => at::While {
+            init_expr: Box::new(translate_expr(target)),
+            condition: Box::new(translate_expr(iter)),
+            loop_expr: Box::new(translate_stmt_list(body)),
+            post_expr: Box::new(translate_stmt_list(orelse)),
         },
-        StmtKind::Assign{targets, value, type_comment} => {
-            println!("Not impl Assign {:?} {:?} {:?}", targets, value, type_comment);
-            at::Unit 
+        Stmt::While(StmtWhile { test, body, orelse, .. }) => at::While {
+            init_expr: Box::new(at::Unit),
+            condition: Box::new(translate_expr(test)),
+            loop_expr: Box::new(translate_stmt_list(body)),
+            post_expr: Box::new(translate_stmt_list(orelse)),
         },
-        StmtKind::AugAssign{target, op, value} => {
-            println!("Not impl AugAssign {:?} {:?} {:?}", target, op, value);
-            at::Unit 
+        Stmt::If(StmtIf { test, body, orelse, .. }) => at::If {
+            condition: Box::new(translate_expr(test)),
+            then: Box::new(translate_stmt_list(body)),
+            els: Box::new(translate_stmt_list(orelse)),
         },
-        StmtKind::AnnAssign{target, annotation, value, simple} => {
-            println!("Not impl AnnAssign {:?} {:?} {:?} {:?}", target, annotation, value, simple);
-            at::Unit 
+        Stmt::Assert(StmtAssert { test, msg, .. }) => at::Assert {
+            condition: Box::new(translate_expr(test)),
+            message: msg
+                .as_ref()
+                .map_or_else(|| Box::new(at::Unit), |m| Box::new(translate_expr(m))),
         },
-        StmtKind::For{target, iter, body, orelse, type_comment: _} => at::While{init_expr: Box::new(translate_expr_kind(target.node)), condition: Box::new(translate_expr_kind(iter.node)), loop_expr: Box::new(translate_stmt_kind_list(body)), post_expr: Box::new(translate_stmt_kind_list(orelse))},
-        StmtKind::AsyncFor{target, iter, body, orelse, type_comment: _} => at::While{init_expr: Box::new(translate_expr_kind(target.node)), condition: Box::new(translate_expr_kind(iter.node)), loop_expr: Box::new(translate_stmt_kind_list(body)), post_expr: Box::new(translate_stmt_kind_list(orelse))},
-        StmtKind::While{test, body, orelse} => at::While{init_expr: Box::new(at::Unit), condition: Box::new(translate_expr_kind(test.node)), loop_expr: Box::new(translate_stmt_kind_list(body)), post_expr: Box::new(translate_stmt_kind_list(orelse))},
-        StmtKind::If{test, body, orelse} => at::If{condition: Box::new(translate_expr_kind(test.node)), then: Box::new(translate_stmt_kind_list(body)), els: Box::new(translate_stmt_kind_list(orelse))},
-        StmtKind::With{items, body, type_comment} => {
-            println!("Not impl With {:?} {:?} {:?}", items, body, type_comment);
-            at::Unit 
-        },
-        StmtKind::AsyncWith{items, body, type_comment} => {
-            println!("Not impl AsyncWith {:?} {:?} {:?}", items, body, type_comment);
-            at::Unit 
-        },
-        StmtKind::Match{subject, cases} => {
-            println!("Not impl Match {:?} {:?}", subject, cases);
-            at::Unit 
-        },
-        StmtKind::Raise{exc, cause} => {
-            println!("Not impl Raise {:?} {:?}", exc, cause);
-            at::Unit 
-        },
-        StmtKind::Try{body, handlers, orelse, finalbody} => {
-            println!("Not impl Try {:?} {:?} {:?} {:?}", body, handlers, orelse, finalbody);
-            at::Unit 
-        },
-        StmtKind::Assert{test, msg} => at::Assert{condition: Box::new(translate_expr_kind(test.node)), message: Box::new(translate_expr_kind(ExprKind::Yield { value: msg}))},
-        StmtKind::Import{names} => {
-            println!("Not impl Import {:?}", names);
-            at::Unit 
-        },
-        StmtKind::ImportFrom{module, names, level} => {
-            println!("Not impl ImportFrom {:?} {:?} {:?}", module, names, level);
-            at::Unit 
-        },
-        StmtKind::Global{names} => {
-            println!("Not impl Global {:?}", names);
-            at::Unit 
-        },
-        StmtKind::Nonlocal{names} => {
-            println!("Not impl Nonlocal {:?}", names);
-            at::Unit 
-        },
-        StmtKind::Expr{value} => translate_expr_kind(value.node),
-        StmtKind::Pass => {
-            at::Unit 
-        },
-        StmtKind::Break => {
-            at::Break 
-        },
-        StmtKind::Continue => {
-            at::Continue 
+        Stmt::Import(StmtImport { names, .. }) => {
+            let items = names.iter().map(|alias| alias.name.to_string()).collect();
+            at::Iprt {
+                name: "".to_string(),
+                items,
+            }
+        }
+        Stmt::Expr(StmtExpr { value, .. }) => translate_expr(value),
+        Stmt::Pass(_) => at::Unit,
+        Stmt::Break(_) => at::Break,
+        Stmt::Continue(_) => at::Continue,
+        _ => {
+            println!("Not implemented statement {:?}", stmt);
+            at::Unit
         }
     }
 }
 
-fn translate_stmt_kind_list(skl: Vec<Located<StmtKind>>) -> at { 
+/// Translates a list of Python statements into a sequence of `AlephTree` nodes.
+fn translate_stmt_list(stmts: &[Stmt]) -> at {
     let mut res = at::Unit;
-    for sk in skl {
+    for stmt in stmts {
+        let current = translate_stmt(stmt);
         res = match res {
-            at::Unit => translate_stmt_kind(sk.node),
-            _ => at::Stmts{expr1: Box::new(res), expr2: Box::new(translate_stmt_kind(sk.node))}
-        }
+            at::Unit => current,
+            _ => at::Stmts {
+                expr1: Box::new(res),
+                expr2: Box::new(current),
+            },
+        };
     }
     res
 }
 
-/// Python parser
-/// #Arguments
-/// `source` - String to parse
-///
-/// # Return
-/// This function return an AlephTree
+/// Parses a Python source string into an `AlephTree`.
 pub fn python_parse(source: String) -> at {
-    let ast = parser::parse_program(&source, "<embedded>").unwrap();
-    //  println!("AST: {:?}", ast);
-    translate_stmt_kind_list(ast)
+    let ast = rustpython_parser::ast::Suite::parse(&source, "<embedded>")
+        .expect("Failed to parse Python source.");
+    translate_stmt_list(&ast)
 }
-
 
